@@ -13,3 +13,6 @@
 - 从第几个音频开始测试功能待添加
 - 少许报错弹窗未完善，注释暂时不全
 - 分析功能待添加
+
+## 界面详情
+![](https://shenyunmomie.oss-cn-beijing.aliyuncs.com/imags/202308122343690.png)
