@@ -51,6 +51,7 @@ def search_files(path,all_files = []):
             all_files.append(cur_path)
     return all_files
 
+# 以下四个函数作用是识别文本进行扩充
 def num2str(intnum):
     numberList = ['零','一','二','三','四','五','六','七','八','九']
     unitList = ['','十','百','千','万','十万','百万','千万','亿']
@@ -152,26 +153,29 @@ def txt_tran(txt):
     # print(txt_lst)
     return txt_lst
 
+# 测试线程
 class testThread(QThread):
-    test_end = Signal()
-    test_one = Signal(int,int)
+    test_end = Signal()         # 测试结束信号
+    test_one = Signal(int,int)  # 测试一个完成信号
 
     def __init__(self):
         super(testThread, self).__init__()
 
+    # 设置参数
     def set_param(self,all_files,input_dict,rbtn_choice):
-        self._pause = False
-        self._end = False
-        self.input_dict = input_dict
-        self.start_point = 0
-        self.rbtn_choice = rbtn_choice
-        self.df = pd.DataFrame(columns=['audio', 'result', 'expected', 'actual', 'play_aftertime', 'response_time'])
-        self.count = 0
-        self.all_files = all_files
+        self._pause = False # 暂停标志
+        self._end = False   # 终止标志
+        self.input_dict = input_dict    # 输入字典==history
+        self.start_point = 0    # 文件指针，文件读写使用
+        self.rbtn_choice = rbtn_choice  # 测试场景，标明是哪个测试场景
+        self.df = pd.DataFrame(columns=['audio', 'result', 'expected', 'actual', 'play_aftertime', 'response_time'])    # 保存文件
+        self.count = 0  # 测试计数器
+        self.all_files = all_files  # 需要测试的语料
 
+        self.mutex = QMutex     # 线程锁，暂无用
+        self.condition = QWaitCondition()   # 线程暂停的判断
 
-        self.mutex = QMutex
-        self.condition = QWaitCondition()
+        # 输入变量的赋值
         self.tpath = input_dict['tpath']
         self.spath = input_dict['spath']
         self.test_num = input_dict['test_num']
@@ -180,7 +184,7 @@ class testThread(QThread):
         self.radioedit = input_dict['radioedit']
 
         self.read_logs()  # 初始化log，使其在最新内容开始位置
-        self.pull_command = f'adb pull {self.logpath} {self.spath}'
+        self.pull_command = f'adb pull {self.logpath} {self.spath}' #pull命令
 
     # ----------读取日志信息并返回-------------
     def read_logs(self):
@@ -208,12 +212,12 @@ class testThread(QThread):
             f.write(
                 f"准确率：{round(float(len(self.df[self.df['result'] == True]) / (len(self.df))) * 100, 2)}% 拒识率：{round(float(len(self.df[self.df['result'] == False]) / (len(self.df))) * 100, 2)}%")
 
+    # df保存
     def save_df(self,temp_df):
-        # 保存
         self.df = pd.concat([self.df, temp_df], ignore_index=True)
         self.df.to_excel(self.spath+ r'\result.xlsx')
 
-    # 将日志写入到保存文件，并返回最新内容
+    # 根据连接方式不同，将日志写入到保存文件，并返回最新内容
     def log_info(self):
         if self.rbtn_choice[-8:] == 'adb_wifi' or self.rbtn_choice[-3:] == 'adb':
             os.system(self.pull_command)
@@ -230,6 +234,9 @@ class testThread(QThread):
                     f.write('\n')
             return ';'.join(line)
 
+    # 测试运行的主函数，也是唤醒和识别的主要区别所在
+    # 这里虽然是testThread父类，但由于没有明确的例子参照，所以写的是唤醒线程的test_main方法
+    # awakeTestThread是全面继承testThread，，所以testThread也就是awakeTestThread
     def test_main(self,audio_path):
         expected = self.input_dict['a_expect']
         play_audio(audio_path)  # 播放音频
@@ -260,8 +267,8 @@ class testThread(QThread):
         return result, expected, actual, play_aftertime, response_time
 
     def run(self):
-
         for audio_path in self.all_files:
+            # 暂停功能
             while self._pause:
                 self.mutex.lock()
                 # 此处没有锁住任何资源，因为该test本身就是顺序执行的
@@ -270,6 +277,7 @@ class testThread(QThread):
 
                 self.mutex.unlock()
 
+            # 终止功能
             if self._end == True:
                 break
 
@@ -278,40 +286,50 @@ class testThread(QThread):
             # if self.count <= test_begin:
             #     continue
 
+            # 测试该音频
             result, expected, actual, play_aftertime, response_time = self.test_main(audio_path)
-
             audio_name = audio_path.split('\\')[-1]  # 音频名
+
+            # 临时df，用于add，因为df只推荐用concat这种添加方法
             temp_df = pd.DataFrame([[audio_name, result, expected, actual, play_aftertime, response_time]],
                                   columns=['audio', 'result', 'expected', 'actual', 'play_aftertime', 'response_time'])
             self.save_df(temp_df)
-            self.test_one.emit(self.count,len(self.all_files))
 
+            self.test_one.emit(self.count,len(self.all_files))  # 该音频测试完毕信号
+
+            # 打印该测试结果
             logging.info(f"NO.{self.count}:{audio_name}")
             logging.info(f'expected：{expected} \nactual：{actual}')
             logging.info(f"result: {result}\n")
             time.sleep(5)  # 测试间隔
 
+            # 测试数量
             if self.count == self.test_num:
                 break
+        # 测试结果统计
         self.desc_result()
-        self.test_end.emit()
+        self.test_end.emit()    # 测试结束信号
 
+    # 暂停
     def pause_thd(self):
         self._pause = True
 
+    # 继续
     def resume_thd(self):
         self._pause = False
         self.condition.wakeAll()
 
+    # 终止
     def end_thd(self):
         self._end = True
 
+# 唤醒线程
 class awakeTestThread(testThread):
 
     def __init__(self):
         super(awakeTestThread, self).__init__()
 
-
+# 识别线程
 class distTestThread(testThread):
 
     def __init__(self):
@@ -320,13 +338,15 @@ class distTestThread(testThread):
     def set_param(self,all_files,input_dict,rbtn_choice):
         super(distTestThread, self).set_param(all_files,input_dict,rbtn_choice)
 
+        # 赋值识别需要的变量
         self.d_re = input_dict['d_re']
+        # 唤醒音频，可多个，随机
         if os.path.isdir(input_dict['d_awkaudio']):
             self.awake_path_list = search_files(input_dict['d_awkaudio'])
         else:
             self.awake_path_list = [input_dict['d_awkaudio']]
 
-
+    # 测试主要函数
     def test_main(self,audio_path):
         logging.info(f'当前语料：{audio_path}')
         # 判断是否响应
@@ -348,12 +368,17 @@ class distTestThread(testThread):
                 logging.error("未成功唤醒")
                 continue
 
+        # 识别结果提取
         try:
             actual = re.findall(self.d_re, log)[-1].strip()
         except IndexError:
             actual = ''
-        expected = audio_path.split('\\')[-2]  # 预期结果，从上一级文件夹查找
+
+        # 预期结果，从上一级文件夹查找
+        expected = audio_path.split('\\')[-2]
         expected_lst = txt_tran(expected)
+
+        # 判断是否正确
         if actual in expected_lst:
             result = True
         else:
