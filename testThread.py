@@ -5,9 +5,9 @@ import re
 import time
 import wave
 import random
-import pyaudio
 import logging
 import pandas as pd
+import pyaudio
 
 # vui.log的唤醒
 def re_extract(log,log_re):

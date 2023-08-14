@@ -3,7 +3,6 @@ from PySide6.QtCore import QObject,Signal,QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtUiTools import QUiLoader
 
-import serial
 import serial.tools.list_ports
 import subprocess
 import sys,os
