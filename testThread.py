@@ -9,48 +9,6 @@ import logging
 import pandas as pd
 import pyaudio
 
-# vui.log的唤醒
-def re_extract(log,log_re):
-    if re.findall(log_re, log):
-        return True
-    else:
-        return False
-
-#-------------播放-------------
-def play_audio(audio_path):
-    CHUNK = 1024
-
-    wf = wave.open(audio_path,mode='rb')
-    p = pyaudio.PyAudio()
-
-    steam = p.open(format=p.get_format_from_width(wf.getsampwidth()),
-                   channels=wf.getnchannels(),
-                   rate=wf.getframerate(),
-                   output=True)
-
-    data = wf.readframes(CHUNK)
-
-    while data != b'':
-        steam.write(data)
-        data = wf.readframes(CHUNK)
-
-    steam.stop_stream()
-    steam.close()
-    p.terminate()
-
-#---------搜索文件夹-----------
-def search_files(path,all_files = []):
-    filename_list = os.listdir(path)
-    for filename in filename_list:
-        cur_path = os.path.join(path,filename)
-        if os.path.isdir(cur_path):
-            search_files(cur_path,all_files)
-        else:
-            cur_path_tr = cur_path.replace(' ','_')
-            os.rename(cur_path,cur_path_tr)
-            all_files.append(cur_path)
-    return all_files
-
 # 以下四个函数作用是识别文本进行扩充
 def num2str(intnum):
     numberList = ['零','一','二','三','四','五','六','七','八','九']
@@ -153,6 +111,41 @@ def txt_tran(txt):
     # print(txt_lst)
     return txt_lst
 
+#-------------播放-------------
+def play_audio(audio_path):
+    CHUNK = 1024
+
+    wf = wave.open(audio_path,mode='rb')
+    p = pyaudio.PyAudio()
+
+    steam = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                   channels=wf.getnchannels(),
+                   rate=wf.getframerate(),
+                   output=True)
+
+    data = wf.readframes(CHUNK)
+
+    while data != b'':
+        steam.write(data)
+        data = wf.readframes(CHUNK)
+
+    steam.stop_stream()
+    steam.close()
+    p.terminate()
+
+#---------搜索文件夹-----------
+def search_files(path,all_files = []):
+    filename_list = os.listdir(path)
+    for filename in filename_list:
+        cur_path = os.path.join(path,filename)
+        if os.path.isdir(cur_path):
+            search_files(cur_path,all_files)
+        else:
+            cur_path_tr = cur_path.replace(' ','_')
+            os.rename(cur_path,cur_path_tr)
+            all_files.append(cur_path)
+    return all_files
+
 # 测试线程
 class testThread(QThread):
     test_end = Signal()         # 测试结束信号
@@ -165,7 +158,7 @@ class testThread(QThread):
     def set_param(self,all_files,input_dict,rbtn_choice):
         self._pause = False # 暂停标志
         self._end = False   # 终止标志
-        self.input_dict = input_dict    # 输入字典==history
+        self.input_dict = input_dict    # 输入字典,history
         self.start_point = 0    # 文件指针，文件读写使用
         self.rbtn_choice = rbtn_choice  # 测试场景，标明是哪个测试场景
         self.df = pd.DataFrame(columns=['audio', 'result', 'expected', 'actual', 'play_aftertime', 'response_time'])    # 保存文件
@@ -186,7 +179,14 @@ class testThread(QThread):
         self.read_logs()  # 初始化log，使其在最新内容开始位置
         self.pull_command = f'adb pull {self.logpath} {self.spath}' #pull命令
 
-    # ----------读取日志信息并返回-------------
+    # 判断是否唤醒
+    def re_extract(self, log, awake_re):
+        if re.findall(awake_re, log):
+            return True
+        else:
+            return False
+
+    # 读取日志信息并返回
     def read_logs(self):
         fo = open(f'{self.spath}\\{self.logpath.split("/")[-1]}', "rb")  # 一定要用'rb'因为seek 是以bytes来计算的
         fo.seek(self.start_point, 1)  # 移动文件读取指针到指定位置
@@ -234,37 +234,8 @@ class testThread(QThread):
                     f.write('\n')
             return ';'.join(line)
 
-    # 测试运行的主函数，也是唤醒和识别的主要区别所在
-    # 这里虽然是testThread父类，但由于没有明确的例子参照，所以写的是唤醒线程的test_main方法
-    # awakeTestThread是全面继承testThread，，所以testThread也就是awakeTestThread
     def test_main(self,audio_path):
-        expected = self.input_dict['a_expect']
-        play_audio(audio_path)  # 播放音频
-        time.sleep(2)  # 等待响应
-        # 记录播放的时间和本地时间
-        play_aftertime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        times = 4  # 间隔0.5s检查，五次检查都为成功，判断未唤醒，退出循环
-        # 判断是否响应
-        while True:
-            # 将日志写入到保存文件，并返回最新内容
-            log = self.log_info()
-            response_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            # 判读是否唤醒
-            if re_extract(log, self.a_re) == True:
-                result = True
-                actual = expected
-                break
-            else:
-                time.sleep(0.5)  # 无需看
-            # 判断等待时间是否超时
-            if times == 0:
-                response_time = 0
-                result = False
-                actual = ''
-                break
-            else:
-                times -= 1
-        return result, expected, actual, play_aftertime, response_time
+        pass
 
     def run(self):
         for audio_path in self.all_files:
@@ -328,6 +299,39 @@ class awakeTestThread(testThread):
 
     def __init__(self):
         super(awakeTestThread, self).__init__()
+        
+    def set_param(self,all_files,input_dict,rbtn_choice):
+        super(awakeTestThread, self).set_param(all_files,input_dict,rbtn_choice)
+        
+    # 测试运行的主函数，也是唤醒和识别的主要区别所在
+    def test_main(self,audio_path):
+        expected = self.input_dict['a_expect']
+        play_audio(audio_path)  # 播放音频
+        # 记录播放的时间和本地时间
+        play_aftertime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        time.sleep(2)  # 等待响应
+        times = 4  # 间隔0.5s检查，五次检查都为成功，判断未唤醒，退出循环
+        # 判断是否响应
+        while True:
+            # 将日志写入到保存文件，并返回最新内容
+            log = self.log_info()
+            response_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            # 判读是否唤醒
+            if self.re_extract(log, self.a_re) == True:
+                result = True
+                actual = expected
+                break
+            else:
+                time.sleep(0.5)  # 无需看
+            # 判断等待时间是否超时
+            if times == 0:
+                response_time = 0
+                result = False
+                actual = ''
+                break
+            else:
+                times -= 1
+        return result, expected, actual, play_aftertime, response_time
 
 # 识别线程
 class distTestThread(testThread):
@@ -360,7 +364,7 @@ class distTestThread(testThread):
             # 将日志写入到保存文件，并返回最新内容
             log = self.log_info()
             # 判读是否唤醒
-            if re_extract(log,self.a_re) == True:
+            if self.re_extract(log,self.a_re) == True:
                 logging.info("唤醒成功")
                 break
             else:
@@ -386,3 +390,4 @@ class distTestThread(testThread):
         # 记录响应的时间和本地时间
         response_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         return result, expected, actual, play_aftertime, response_time
+

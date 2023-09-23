@@ -10,11 +10,8 @@ import json
 import logging
 
 from testThread import search_files,awakeTestThread,distTestThread
-from logContent import readLog
+from logContent import logObject
 
-log_format = "%(asctime)s - %(levelname)s - %(message)s"
-date_format = "%Y-%m-%d %H:%M:%S"
-logging.basicConfig(filename='app.log',level=logging.INFO,format=log_format,datefmt=date_format,encoding='utf-8')
 
 # 自定义信号
 class MySignal(QObject):
@@ -22,12 +19,10 @@ class MySignal(QObject):
     # 保存完成时的信号
     save_end = Signal()
 
-
 class Ui_MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-
 
     def setupUi(self):
 
@@ -46,7 +41,7 @@ class Ui_MainWindow(QMainWindow):
         self.awake_testhd = awakeTestThread()   # 唤醒线程
         self.dist_testhd = distTestThread()     # 识别线程
         self.ms = MySignal()    # 自定义信号
-        self.logthread = readLog()  # 读取日志
+        self.logthread = logObject()  # 读取日志
         self.timer = QTimer()  # 计时器，每隔500ms读一次日志
 
         # 改变单选框时，radioedit输入不同，进行不同内容的变化
@@ -336,7 +331,7 @@ class Ui_MainWindow(QMainWindow):
 
     # 读取日志文件并写入控制台
     def outputControl(self):
-        log_connect = self.logthread.main().decode("utf-8",errors="ignore")
+        log_connect = self.logthread.read().decode("utf-8",errors="ignore")
         if log_connect != '':
             self.ui.control.append(log_connect)
 
